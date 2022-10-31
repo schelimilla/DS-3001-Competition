@@ -1,0 +1,202 @@
+---
+title: "Competition1"
+author: "Srini Chelimilla"
+date: "2022-10-28"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(caret)
+library(ROCR)
+library(MLmetrics)
+library(mltools)
+library(rpart.plot)
+library(dplyr)
+```
+
+```{r}
+
+states = read.csv("Competition/states_all_2_training.csv")
+View(states)
+```
+
+```{r}
+# Data cleaning
+
+p = colMeans(is.na(states))
+
+# states = states[, -22:-23]
+# states = states[, -23]
+states = states[, -1]
+
+View(states)
+
+dim(states)
+states = states[complete.cases(states), ]
+dim(states)
+
+
+```
+
+```{r}
+# Check data types and collapse factor variables as needed
+
+
+states$STATE <- fct_collapse(states$STATE,
+                                         northeast = c("CONNECTICUT", "MAINE", "MASSACHUSETTS", "NEW_HAMPSHIRE", "RHODE_ISLAND", "VERMONT", "NEW_JERSEY", "NEW_YORK", "PENNSYLVANIA"),
+                                         midwest = c("ILLINOIS", "INDIANA", "MICHIGAN", "OHIO", "WISCONSIN", "IOWA", "KANSAS", "MINNESOTA", "MISSOURI", "NEBRASKA", "NORTH_DAKOTA", "SOUTH_DAKOTA"),
+                                         south = c("DELAWARE", "FLORIDA", "GEORGIA", "MARYLAND", "NORTH_CAROLINA", "SOUTH_CAROLINA", "VIRGINIA", "WASHINGTON", "DISTRICT_OF_COLUMBIA", "WEST_VIRGINIA", "ALABAMA", "KENTUCKY", "MISSISSIPPI", "TENNESSEE", "ARKANSAS", "LOUISIANA", "OKLAHOMA", "TEXAS"),
+                                         west = c("ARIZONA", "COLORADO", "IDAHO", "MONTANA", "NEVADA", "NEW_MEXICO", "UTAH", "WYOMING", "ALASKA", "CALIFORNIA", "HAWAII", "OREGON", "WASHINGTON"))
+
+str(states)
+
+```
+
+```{r}
+# Split data
+
+set.seed(1999)
+part_index_1 <- caret::createDataPartition(states$AVG_READING_4_SCORE,
+                                           times=1,
+                                           p = 0.70,
+                                           groups=1,
+                                           list=FALSE)
+
+train <- states[part_index_1, ]
+tune_and_test <- states[-part_index_1, ]
+train
+
+tune_and_test_index <- createDataPartition(tune_and_test$AVG_READING_4_SCORE,
+                                           p = .5,
+                                           list = FALSE,
+                                           times = 1)
+
+tune <- tune_and_test[tune_and_test_index, ]
+test <- tune_and_test[-tune_and_test_index, ]
+
+
+dim(train)
+dim(test) 
+dim(tune)
+
+```
+
+
+
+
+```{r}
+# Build a model
+
+features <- train[, -23]
+
+# features <- features[, -c(3, 6)]
+# features <- features[, -14]
+# features <- features[, -15]
+
+
+# View(features)
+target <- train$AVG_READING_4_SCORE
+
+str(features)
+
+str(target)
+
+
+fitControl <- trainControl(method = "repeatedcv",
+                          number = 10,
+                          repeats = 5) 
+
+
+tree.grid <- expand.grid(maxdepth=c(3:20))
+
+target
+
+set.seed(1984)
+
+states_model <- train(x=features,
+                y=target,
+                method="rpart2",#type of model uses maxdepth to select a model
+                trControl=fitControl,#previously created
+                tuneGrid=tree.grid,#expanded grid
+                metric="RMSE")
+```
+
+
+
+```{r}
+# Evaluating model
+
+states_model
+
+plot(states_model)
+
+varImp(states_model)
+
+```
+
+
+```{r}
+# Predicting
+
+tree.grid <- expand.grid(maxdepth=c(7))
+
+state_model_a <- train(x=features,
+                y=target,
+                method="rpart2",#type of model uses maxdepth to select a model
+                trControl=fitControl,#previously created
+                tuneGrid=tree.grid,#expanded grid
+                metric="RMSE")
+
+
+pred_test_reg <- predict(state_model_a,test)
+
+head(pred_test_reg)
+
+postResample(pred = pred_test_reg,obs = test$AVG_READING_4_SCORE)
+
+```
+
+```{r}
+# Testing with given test set
+
+given_test = read.csv("~/DS 3001/DS-3001/Competition/test_set_public.csv")
+
+given_test$STATE <- fct_collapse(given_test$STATE,
+                                         northeast = c("CONNECTICUT", "MAINE", "MASSACHUSETTS", "NEW_HAMPSHIRE", "RHODE_ISLAND", "VERMONT", "NEW_JERSEY", "NEW_YORK", "PENNSYLVANIA"),
+                                         midwest = c("ILLINOIS", "INDIANA", "MICHIGAN", "OHIO", "WISCONSIN", "IOWA", "KANSAS", "MINNESOTA", "MISSOURI", "NEBRASKA", "NORTH_DAKOTA", "SOUTH_DAKOTA"),
+                                         south = c("DELAWARE", "FLORIDA", "GEORGIA", "MARYLAND", "NORTH_CAROLINA", "SOUTH_CAROLINA", "VIRGINIA", "WASHINGTON", "DISTRICT_OF_COLUMBIA", "WEST_VIRGINIA", "ALABAMA", "KENTUCKY", "MISSISSIPPI", "TENNESSEE", "ARKANSAS", "LOUISIANA", "OKLAHOMA", "TEXAS"),
+                                         west = c("ARIZONA", "COLORADO", "IDAHO", "MONTANA", "NEVADA", "NEW_MEXICO", "UTAH", "WYOMING", "ALASKA", "CALIFORNIA", "HAWAII", "OREGON", "WASHINGTON"))
+
+
+tree.grid <- expand.grid(maxdepth=c(10))
+
+state_model_b <- train(x=features,
+                y=target,
+                method="rpart2",#type of model uses maxdepth to select a model
+                trControl=fitControl,#previously created
+                tuneGrid=tree.grid,#expanded grid
+                metric="RMSE")
+state_model_b
+
+
+pred_test_reg_2 <- predict(state_model_b,given_test)
+
+
+
+head(pred_test_reg_2)
+
+
+write.csv(pred_test_reg_2,"~/DS 3001/DS-3001/Competition/output1.csv", row.names = FALSE)
+
+```
+
